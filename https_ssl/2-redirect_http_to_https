@@ -1,0 +1,40 @@
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    chroot /var/lib/haproxy
+    stats socket /run/haproxy/admin.sock mode 660 level admin
+    stats timeout 30s
+    user haproxy
+    group haproxy
+    daemon
+    tune.ssl.default-dh-param 2048
+
+defaults
+    log global
+    mode http
+    option httplog
+    option dontlognull
+    timeout connect 5000
+    timeout client 50000
+    timeout server 50000
+
+frontend http_front
+    bind *:80
+    http-request redirect scheme https code 301 unless { ssl_fc }
+    default_backend http_back
+
+frontend https_front
+    bind *:443 ssl crt /etc/haproxy/certs/www.lauraceline.tech.pem
+    http-request set-header X-Forwarded-Proto https
+
+    acl is_non_www hdr(host) -i lauraceline.tech
+    http-request redirect prefix https://www.lauraceline.tech code 301 if is_non_www
+    # Add HSTS header
+    http-response set-header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    default_backend http_back
+
+backend http_back
+    balance roundrobin
+    option forwardfor
+    server 6442-web-01 98.81.213.63:80 check
+    server 6442-web-02 44.201.87.255:80 check
